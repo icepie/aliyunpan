@@ -391,6 +391,9 @@ func main() {
 		// 上传文件/目录 upload
 		command.CmdUpload(),
 
+		// Web上传模式 web
+		command.CmdWeb(),
+
 		// 下载文件/目录 download
 		command.CmdDownload(),
 

@@ -83,6 +83,10 @@ type (
 		FileRecorder *log.FileRecorder
 
 		UI *ui.DashboardPanel // 上传统计面板UI
+
+		OnUploadStatus func(status uploader.Status) // 上传状态回调，供非终端界面展示进度
+		OnTaskSuccess  func()
+		OnTaskFailed   func(message string, err error)
 	}
 )
 
@@ -207,6 +211,10 @@ func (utu *UploadTaskUnit) upload() (result *taskframework.TaskUnitRunResult) {
 	}
 
 	muer.OnUploadStatusEvent(func(status uploader.Status, updateChan <-chan struct{}) {
+		if utu.OnUploadStatus != nil {
+			utu.OnUploadStatus(status)
+		}
+
 		select {
 		case <-updateChan:
 			utu.UploadingDatabase.UpdateUploading(&utu.LocalFileChecksum.LocalFileMeta, muer.InstanceState())
@@ -305,6 +313,9 @@ func (utu *UploadTaskUnit) OnRetry(lastRunResult *taskframework.TaskUnitRunResul
 func (utu *UploadTaskUnit) OnSuccess(lastRunResult *taskframework.TaskUnitRunResult) {
 	// 执行插件
 	utu.pluginCallback("success")
+	if utu.OnTaskSuccess != nil {
+		utu.OnTaskSuccess()
+	}
 
 	// 更新UI面板状态
 	utu.updateUITaskState(ui.TaskSuccess, "")
@@ -323,6 +334,13 @@ func (utu *UploadTaskUnit) OnSuccess(lastRunResult *taskframework.TaskUnitRunRes
 func (utu *UploadTaskUnit) OnFailed(lastRunResult *taskframework.TaskUnitRunResult) {
 	// 失败
 	utu.pluginCallback("fail")
+	if utu.OnTaskFailed != nil {
+		if lastRunResult == nil {
+			utu.OnTaskFailed("", nil)
+		} else {
+			utu.OnTaskFailed(lastRunResult.ResultMessage, lastRunResult.Err)
+		}
+	}
 	utu.updateUITaskState(ui.TaskCanceled, "取消: "+utu.LocalFileChecksum.Path.LogicPath)
 }
 
@@ -359,6 +377,9 @@ func (utu *UploadTaskUnit) OnCancel(lastRunResult *taskframework.TaskUnitRunResu
 	failedMessage := lastRunResult.ResultMessage
 	if lastRunResult.Err != nil {
 		failedMessage = fmt.Sprintf("%s, %s", lastRunResult.ResultMessage, lastRunResult.Err)
+	}
+	if utu.OnTaskFailed != nil {
+		utu.OnTaskFailed(failedMessage, lastRunResult.Err)
 	}
 	utu.updateUITaskState(ui.TaskCanceled, failedMessage)
 }
